@@ -34,6 +34,9 @@ public class CourseController {
     @Autowired
     UserRepository userRepository;
 
+    @Autowired
+    GradebookServiceProxy gradebookService;
+
 
     // ADMIN function to create a new course
     @PostMapping("/courses")
@@ -43,6 +46,11 @@ public class CourseController {
         c.setTitle(course.title());
         c.setCourseId(course.courseId());
         courseRepository.save(c);
+
+        // send message to gradebook
+        gradebookService.sendMessage("addCourse " + gradebookService.asJsonString(course));
+        
+        
         return new CourseDTO(
                 c.getCourseId(),
                 c.getTitle(),
@@ -60,6 +68,10 @@ public class CourseController {
             c.setTitle(course.title());
             c.setCredits(course.credits());
             courseRepository.save(c);
+
+            // Send message to gradebook
+            gradebookService.sendMessage("updateCourse " + gradebookService.asJsonString(course));
+
             return new CourseDTO(
                     c.getCourseId(),
                     c.getTitle(),
@@ -76,6 +88,9 @@ public class CourseController {
         // if course does not exist, do nothing.
         if (c!=null) {
             courseRepository.delete(c);
+
+            // Send message to gradebook
+            gradebookService.sendMessage("deleteCourse " + courseid)
         }
     }
 
