@@ -41,10 +41,13 @@ public class AssignmentController {
     SectionRepository sectionRepository;
 
     @Autowired
-    SectionRepository sectionRepository;
+    UserRepository userRepository;
 
     @Autowired
-    UserRepository userRepository;
+    EnrollmentRepository enrollmentRepository;
+
+    @Autowired
+    GradeRepository gradeRepository;
 
 
     @GetMapping("/sections/{secNo}/assignments")
@@ -183,4 +186,40 @@ public class AssignmentController {
         }
         return dto_list;
     }
+
+    /**
+     students lists their assignments given year and semester value
+     returns list of assignments may be empty
+     logged in user must be the student (assignment 7)
+     */
+    @GetMapping("/assignments")
+    public List<AssignmentStudentDTO> getStudentAssignments(
+            @RequestParam("studentId") int studentId,
+            @RequestParam("year") int year,
+            @RequestParam("semester") String semester) {
+
+        List<Assignment> assignments = assignmentRepository.findByStudentIdAndYearAndSemesterOrderByDueDate(studentId, year, semester);
+        List<AssignmentStudentDTO> dtoList = new ArrayList<>();
+        for (Assignment a : assignments) {
+            Enrollment enrollment = enrollmentRepository.findEnrollmentBySectionNoAndStudentId(a.getSection().getSectionNo(), studentId);
+            Grade grade = null;
+            if (enrollment != null) {
+                grade = gradeRepository.findByEnrollmentIdAndAssignmentId(
+                      enrollment.getEnrollmentId(),
+                      a.getAssignmentId());
+            }
+            Integer score = grade != null ? grade.getScore() : null;
+            dtoList.add(new AssignmentStudentDTO(
+                    a.getAssignmentId(),
+                    a.getTitle(),
+                    a.getDueDate(),
+                    a.getSection().getCourse().getCourseId(),
+                    a.getSection().getSecId(),
+                    score
+            ));
+        }
+        return dtoList;
+    }
+
+	
 }
