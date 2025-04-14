@@ -8,6 +8,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import com.cst438.service.GradebookServiceProxy;
+
 
 import java.util.ArrayList;
 import java.util.List;
@@ -21,6 +23,9 @@ public class UserController {
     UserRepository userRepository;
 
     BCryptPasswordEncoder encoder = new BCryptPasswordEncoder();
+
+    GradebookServiceProxy gradebookService;
+
 
     /**
      list all users
@@ -58,6 +63,9 @@ public class UserController {
             throw  new ResponseStatusException( HttpStatus.BAD_REQUEST, "invalid user type");
         }
         userRepository.save(user);
+        //send message to gradebook
+        gradebookService.sendMessage("addUser " + gradebookService.asJsonString(userDTO));
+        
         return new UserDTO(user.getId(), user.getName(), user.getEmail(), user.getType());
     }
 
@@ -80,6 +88,9 @@ public class UserController {
             throw  new ResponseStatusException( HttpStatus.BAD_REQUEST, "invalid user type");
         }
         userRepository.save(user);
+        //send message to gradebook
+        gradebookService.sendMessage("updateUser " + gradebookService.asJsonString(userDTO));
+        
         return new UserDTO(user.getId(), user.getName(), user.getEmail(), user.getType());
     }
 
@@ -91,6 +102,9 @@ public class UserController {
         User user = userRepository.findById(id).orElse(null);
         if (user!=null) {
             userRepository.delete(user);
+            
+            // send message to gradebook
+            gradebookService.sendMessage("deleteUser " + id);
         }
 
     }
