@@ -11,9 +11,12 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 
+
 import com.cst438.domain.Enrollment;
 import com.cst438.domain.EnrollmentRepository;
 import com.cst438.dto.EnrollmentDTO;
+import com.cst438.service.RegistrarServiceProxy;
+
 
 @RestController
 @CrossOrigin(origins = "http://localhost:3000")
@@ -21,6 +24,10 @@ public class EnrollmentController {
 
     @Autowired
     EnrollmentRepository enrollmentRepository;
+    
+    @Autowired
+    RegistrarServiceProxy registrarService;
+ 
 
     /**
      instructor gets list of enrollments for a section
@@ -68,6 +75,9 @@ public class EnrollmentController {
         if (e != null) {
             e.setGrade(dto.grade());
             enrollmentRepository.save(e);
+
+            // Send message to registrar service
+            registrarService.sendMessage("updateFinalGrade " + registrarService.asJsonString(dto));
         }
       }
     }
