@@ -24,6 +24,7 @@ import com.cst438.domain.Term;
 import com.cst438.domain.User;
 import com.cst438.domain.UserRepository;
 import com.cst438.dto.EnrollmentDTO;
+import com.cst438.service.GradebookServiceProxy;
 
 
 
@@ -39,6 +40,9 @@ public class StudentScheduleController {
 
     @Autowired
     private UserRepository userRepository;
+    
+    @Autowired
+    private GradebookServiceProxy gradebookService;
 
     /**
      students lists their transcript containing all enrollments
@@ -154,6 +158,12 @@ public class StudentScheduleController {
             e.getSection().getTerm().getYear(),
             e.getSection().getTerm().getSemester()
         );
+         
+        // aend message to gradebook
+        gradebookService.sendMessage("addEnrollment " + gradebookService.asJsonString(dto));
+
+        return dto;
+        
     }
 
     /**
@@ -184,5 +194,7 @@ public class StudentScheduleController {
 
         // Delete the enrollment
         enrollmentRepository.delete(enrollment);
+        // send message to gradebook
+        gradebookService.sendMessage("deleteEnrollment " + enrollmentId);
     }
 }
