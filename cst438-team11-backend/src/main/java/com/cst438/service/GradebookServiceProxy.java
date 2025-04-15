@@ -24,6 +24,22 @@ public class GradebookServiceProxy {
     @RabbitListener(queues = "registrar_service")
     public void receiveFromGradebook(String message)  {
          //TODO implement this message 
+        try {
+        String[] parts = message.split(" ", 2);
+        String action = parts[0];
+
+        if (action.equals("updateFinalGrade")) {
+            EnrollmentDTO dto = fromJsonString(parts[1], EnrollmentDTO.class);
+            Enrollment enrollment = enrollmentRepository.findById(dto.enrollmentId()).orElse(null);
+            if (enrollment != null) {
+                enrollment.setGrade(dto.grade());
+                enrollmentRepository.save(enrollment);
+            }
+        }
+             } catch (Exception e) {
+        System.out.println(" Error proccessing message from Gradebook: " + e.getMessage());
+        
+    }
 } 
 
     private void sendMessage(String s) {
