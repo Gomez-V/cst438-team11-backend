@@ -77,7 +77,11 @@ public class EnrollmentController {
             enrollmentRepository.save(e);
 
             // Send message to registrar service
-            registrarService.sendMessage("updateFinalGrade " + registrarService.asJsonString(dto));
+           try {
+                String msg = "updateFinalGrade " + registrarService.asJsonString(dto);
+                registrarService.sendMessage(msg);
+            } catch (Exception ex) {
+                System.out.println(" Error sending updateFinalGrade to registrar: " + ex.getMessage());
         }
       }
     }
