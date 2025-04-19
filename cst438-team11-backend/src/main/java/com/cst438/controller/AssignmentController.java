@@ -1,5 +1,7 @@
 package com.cst438.controller;
 
+import org.springframework.security.access.prepost.PreAuthorize;
+import java.security.Principal;
 import com.cst438.dto.AssignmentDTO;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
@@ -39,19 +41,25 @@ public class AssignmentController {
 
     @Autowired
     SectionRepository sectionRepository;
-
+	
+    @PreAuthorize("hasAuthority('SCOPE_ROLE_INSTRUCTOR')")
     @GetMapping("/sections/{secNo}/assignments")
-    public List<AssignmentDTO> getAssignments(
-            @PathVariable("secNo") int secNo) {
-		
-		// hint: use the assignment repository method 
-		//  findBySectionNoOrderByDueDate to return 
-		//  a list of assignments
+     public List<AssignmentDTO> getAssignments(@PathVariable("secNo") int secNo, Principal principal) {
+        Section section = sectionRepository.findById(secNo).orElse(null);
+        if (section == null || !section.getInstructorEmail().equals(principal.getName())) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Not authorized for this section");
+        }
 
         List<Assignment> assignments = assignmentRepository.findBySectionNoOrderByDueDate(secNo);
         List<AssignmentDTO> dtoList = new ArrayList<>();
         for (Assignment a : assignments) {
-            dtoList.add(new AssignmentDTO(a.getAssignmentId(), a.getTitle(), a.getDueDate().toString(), a.getSection().getCourse().getCourseId(), a.getSection().getSecId(), a.getSection().getSectionNo()));
+            dtoList.add(new AssignmentDTO(
+                a.getAssignmentId(), 
+                a.getTitle(), 
+                a.getDueDate().toString(), 
+                a.getSection().getCourse().getCourseId(), 
+                a.getSection().getSecId(), 
+                a.getSection().getSectionNo()));
         }
         return dtoList;
         //TODO: Is this done?
@@ -62,12 +70,12 @@ public class AssignmentController {
      Assignment data with primary key is returned.
      logged in user must be the instructor for the section (assignment 7)
      */
+    @PreAuthorize("hasAuthority('SCOPE_ROLE_INSTRUCTOR')")
     @PostMapping("/assignments")
-    public AssignmentDTO createAssignment(
-            @RequestBody AssignmentDTO dto) {
+     public AssignmentDTO createAssignment(@RequestBody AssignmentDTO dto, Principal principal) { 
         Section section = sectionRepository.findById(dto.secNo()).orElse(null);
-        if (section == null ){
-            throw  new ResponseStatusException( HttpStatus.NOT_FOUND, "section not found "+dto.secNo());
+        if (section == null || !section.getInstructorEmail().equals(principal.getName())) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Not authorized for this section");
         }
 
         LocalDate endDate = section.getTerm().getEndDate().toLocalDate();
@@ -75,10 +83,7 @@ public class AssignmentController {
         LocalDate assignDate = LocalDate.parse(dto.dueDate(), formatter);
 
         if (assignDate.isAfter(endDate)) {
-            throw new ResponseStatusException(
-                HttpStatus.BAD_REQUEST,
-                "Assignment due date is after section end date."
-            );
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Assignment due date is after section end date.");
         }
 
         Assignment a = new Assignment();
@@ -86,6 +91,7 @@ public class AssignmentController {
         a.setDueDate(Date.valueOf(dto.dueDate()));
         a.setTitle(dto.title());
         assignmentRepository.save(a);
+
         return new AssignmentDTO(
             a.getAssignmentId(),
             a.getTitle(),
@@ -94,8 +100,6 @@ public class AssignmentController {
             a.getSection().getSecId(),
             a.getSection().getSectionNo()
         );
-
-        // TODO: Is this done?
     }
 
     /**
@@ -104,40 +108,48 @@ public class AssignmentController {
      updated assignment data is returned
      logged in user must be the instructor for the section (assignment 7)
      */
+    @PreAuthorize("hasAuthority('SCOPE_ROLE_INSTRUCTOR')")	
     @PutMapping("/assignments")
-    public AssignmentDTO updateAssignment(@RequestBody AssignmentDTO dto) {
-
+     public AssignmentDTO updateAssignment(@RequestBody AssignmentDTO dto, Principal principal) { 
         Assignment a = assignmentRepository.findById(dto.id()).orElse(null);
-        if (a == null ){
-            throw  new ResponseStatusException( HttpStatus.NOT_FOUND, "assignment not found "+dto.id());
+        if (a == null) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Assignment not found");
         }
+
         Section section = sectionRepository.findById(dto.secNo()).orElse(null);
-        if (section == null ){
-            throw  new ResponseStatusException( HttpStatus.NOT_FOUND, "section not found "+dto.secNo());
+        if (section == null || !section.getInstructorEmail().equals(principal.getName())) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Not authorized for this section");
         }
-        a.setAssignmentId(dto.id());
+
         a.setTitle(dto.title());
-        a.setSection(section); //TODO: Does this need to be removed?
         a.setDueDate(Date.valueOf(dto.dueDate()));
         assignmentRepository.save(a);
 
-
-        // TODO: is this done?
-
-        return null;
+        return new AssignmentDTO( // 🔧 Updated to return proper DTO instead of null
+            a.getAssignmentId(),
+            a.getTitle(),
+            a.getDueDate().toString(),
+            a.getSection().getCourse().getCourseId(),
+            a.getSection().getSecId(),
+            a.getSection().getSectionNo()
+        );
     }
 
     /**
      instructor deletes an assignment for a section.
      logged in user must be the instructor for the section (assignment 7)
      */
+    @PreAuthorize("hasAuthority('SCOPE_ROLE_INSTRUCTOR')")
     @DeleteMapping("/assignments/{assignmentId}")
-    public void deleteAssignment(@PathVariable("assignmentId") int assignmentId) {
-
+    public void deleteAssignment(@PathVariable("assignmentId") int assignmentId, Principal principal) {
         Assignment a = assignmentRepository.findById(assignmentId).orElse(null);
-        if(a != null) {
-            assignmentRepository.delete(a);
+        if (a == null) return;
+
+        Section section = a.getSection();
+        if (!section.getInstructorEmail().equals(principal.getName())) { 
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Not authorized for this section");
         }
-        // TODO: Is this done?
+
+        assignmentRepository.delete(a);
     }
 }
