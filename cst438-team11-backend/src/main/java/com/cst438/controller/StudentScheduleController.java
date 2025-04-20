@@ -3,6 +3,7 @@ package com.cst438.controller;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
+import java.security.Principal;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -14,6 +15,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
+import org.springframework.security.access.prepost.PreAuthorize;
 
 import com.cst438.domain.Course;
 import com.cst438.domain.Enrollment;
@@ -46,39 +48,40 @@ public class StudentScheduleController {
      logged in user must be the student (assignment 7)
      example URL  /transcript?studentId=19803
      */
+    @PreAuthorize("hasAuthority('SCOPE_ROLE_STUDENT')")
     @GetMapping("/transcripts")
-    public List<EnrollmentDTO> getTranscript(@RequestParam("studentId") int studentId) {
+    public List<EnrollmentDTO> getTranscript(Principal principal) {
+        String email = principal.getName(); 
+        User student = userRepository.findByEmail(email);
+        if (student == null) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Student not found");
+        }
 
-     // Fetch all enrollments for this student, sorted by term ID (or by year/semester).
         List<Enrollment> enrollments = enrollmentRepository
-                .findEnrollmentsByStudentIdOrderByTermId(studentId);
+                .findEnrollmentsByStudentIdOrderByTermId(student.getId()); 
 
-        // Convert each Enrollment to an EnrollmentDTO
         List<EnrollmentDTO> result = new ArrayList<>();
         for (Enrollment e : enrollments) {
-            // gather references
             Section section = e.getSection();
             Term term = (section != null) ? section.getTerm() : null;
             Course course = (section != null) ? section.getCourse() : null;
-            User user = e.getUser();
 
-            // build EnrollmentDTO (adjust fields to match your actual DTO constructor)
             EnrollmentDTO dto = new EnrollmentDTO(
                 e.getEnrollmentId(),
                 e.getGrade(),
                 e.getUser().getId(),
                 e.getUser().getName(),
                 e.getUser().getEmail(),
-                e.getSection().getCourse().getCourseId(),
-                e.getSection().getCourse().getTitle(),
-                e.getSection().getSecId(),
-                e.getSection().getSectionNo(),
-                e.getSection().getBuilding(),
-                e.getSection().getRoom(),
-                e.getSection().getTimes(),
-                e.getSection().getCourse().getCredits(),
-                e.getSection().getTerm().getYear(),
-                e.getSection().getTerm().getSemester()
+                course.getCourseId(),
+                course.getTitle(),
+                section.getSecId(),
+                section.getSectionNo(),
+                section.getBuilding(),
+                section.getRoom(),
+                section.getTimes(),
+                course.getCredits(),
+                term.getYear(),
+                term.getSemester()
             );
             result.add(dto);
         }
@@ -90,25 +93,21 @@ public class StudentScheduleController {
      returns the enrollment data including primary key
      logged in user must be the student (assignment 7)
      */
+    @PreAuthorize("hasAuthority('SCOPE_ROLE_STUDENT')")
     @PostMapping("/enrollments/sections/{sectionNo}")
-    public EnrollmentDTO addCourse(
-            @PathVariable int sectionNo,
-            @RequestParam("studentId") int studentId ) {
+    public EnrollmentDTO addCourse(@PathVariable int sectionNo, Principal principal) { 
+        String email = principal.getName(); 
+        User student = userRepository.findByEmail(email);
+        if (student == null) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Student not found");
+        }
 
-        // Verify the section exists
         Section section = sectionRepository.findById(sectionNo)
             .orElseThrow(() -> new ResponseStatusException(
                     HttpStatus.BAD_REQUEST,
                     "Section not found for sectionNo=" + sectionNo
             ));
 
-        User student = userRepository.findById(studentId)
-            .orElseThrow(() -> new ResponseStatusException(
-                        HttpStatus.BAD_REQUEST,
-                        "Student not found for userId=" + studentId
-            ));
-
-         //  Check the current date is between addDate and addDeadline
         LocalDate today = LocalDate.now();
         if (section.getTerm().getAddDeadline() != null
                 && section.getTerm().getAddDate() != null) {
@@ -116,43 +115,39 @@ public class StudentScheduleController {
             LocalDate addEnd = section.getTerm().getAddDeadline().toLocalDate();
             if (today.isBefore(addStart) || today.isAfter(addEnd)) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                        "Not within the add period for this section."
-                );
+                        "Not within the add period for this section.");
             }
         }
-       //  Check that the student is not already enrolled in this section
+
         Enrollment existingEnrollment =
-                enrollmentRepository.findEnrollmentBySectionNoAndStudentId(sectionNo, studentId);
+                enrollmentRepository.findEnrollmentBySectionNoAndStudentId(sectionNo, student.getId());
         if (existingEnrollment != null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "Student " + studentId + " is already enrolled in section " + sectionNo
-            );
+                    "Already enrolled in section " + sectionNo);
         }
 
-        //  Create and save a new Enrollment (grade defaults to null)
         Enrollment e = new Enrollment();
         e.setUser(student);
         e.setSection(section);
         e.setGrade(null);
-
         enrollmentRepository.save(e);
 
         return new EnrollmentDTO(
             e.getEnrollmentId(),
             null,
-            e.getUser().getId(),
-            e.getUser().getName(),
-            e.getUser().getEmail(),
-            e.getSection().getCourse().getCourseId(),
-            e.getSection().getCourse().getTitle(),
-            e.getSection().getSecId(),
-            e.getSection().getSectionNo(),
-            e.getSection().getBuilding(),
-            e.getSection().getRoom(),
-            e.getSection().getTimes(),
-            e.getSection().getCourse().getCredits(),
-            e.getSection().getTerm().getYear(),
-            e.getSection().getTerm().getSemester()
+            student.getId(),
+            student.getName(),
+            student.getEmail(),
+            section.getCourse().getCourseId(),
+            section.getCourse().getTitle(),
+            section.getSecId(),
+            section.getSectionNo(),
+            section.getBuilding(),
+            section.getRoom(),
+            section.getTimes(),
+            section.getCourse().getCredits(),
+            section.getTerm().getYear(),
+            section.getTerm().getSemester()
         );
     }
 
@@ -160,15 +155,24 @@ public class StudentScheduleController {
      students drops an enrollment for a section
      logged in user must be the student (assignment 7)
      */
+    @PreAuthorize("hasAuthority('SCOPE_ROLE_STUDENT')")
     @DeleteMapping("/enrollments/{enrollmentId}")
-    public void dropCourse(@PathVariable("enrollmentId") int enrollmentId) {
+    public void dropCourse(@PathVariable("enrollmentId") int enrollmentId, Principal principal) { 
+        String email = principal.getName(); 
+        User student = userRepository.findByEmail(email);
+        if (student == null) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Student not found");
+        }
 
-     // Find the enrollment
         Enrollment enrollment = enrollmentRepository.findById(enrollmentId)
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.NOT_FOUND,
                         "Enrollment not found for ID=" + enrollmentId
                 ));
+
+        if (enrollment.getUser().getId() != student.getId()) { 
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "You can only drop your own enrollment.");
+        }
 
         // Check that today is before the dropDeadline
         LocalDate today = LocalDate.now();
